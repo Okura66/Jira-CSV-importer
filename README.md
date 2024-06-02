@@ -1,6 +1,7 @@
 # Jira CSV Importer
 
 this script allows you to create or update Jira issues from a CSV file. The script reads data from the CSV file and creates or updates Jira issues based on the data provided. The script uses the Jira REST API to interact with Jira. The script supports multi-threading to process multiple issues concurrently.
+
 ![image](https://github.com/Okura66/Jira-CSV-importer/blob/main/Sch%C3%A9ma%20Python.jpg)
 
 ⚠️ **Warning:** This script will create or update Jira issues based on the data provided in the CSV file. Please make sure to review the data before proceeding.
@@ -14,7 +15,7 @@ The script is design to be trigger by a cron job to automate the process of crea
 - [x] Handle response status, logging, error handling
 - [x] Keyboard interrupt
 - [x] Multi-threading
-- [x] Test with different field types (array, option, date, user, datetime)
+- [x] Test with different field types (array, option, date, user, datetime)\
 :warning: URL field can return error with correct value, it's a Jira bug, you can try tro use v2 of the API instead of v3.
 - [x] Test with large CSV file (80000+ issues created/updated successfully)
 - [ ] Multi-project and issue type support
@@ -63,5 +64,5 @@ Before running the script, you need to configure the following environment varia
 
 ## Logging
 
-The script logs its progress and any errors to a file named `.log` in the same directory as the script.
+The script logs its progress and any errors to a file named `.log` in the same directory as the script.\
 You can set different logging level (see [logging library](https://docs.python.org/3/library/logging.html#logging-levels)).
