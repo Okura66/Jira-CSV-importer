@@ -1,6 +1,7 @@
 # Jira CSV Importer
 
 This script allows you to import data from a CSV file into Jira using the Jira REST API.
+![image](https://github.com/Okura66/Jira-CSV-importer/blob/main/Sch%C3%A9ma%20Python.jpg)
 
 ## Prerequisites
 
@@ -47,3 +48,4 @@ You can customize the mapping between CSV columns and Jira fields by modifying t
 ## Logging
 
 The script logs its progress and any errors to a file named `.log` in the same directory as the script.
+You can set different logging level (see [logging library](https://docs.python.org/3/library/logging.html#logging-levels)) .
