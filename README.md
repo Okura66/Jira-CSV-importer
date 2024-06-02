@@ -14,6 +14,9 @@ The script is design to be trigger by a cron job to automate the process of crea
 - [x] Handle response status, logging, error handling
 - [x] Keyboard interrupt
 - [x] Multi-threading
+- [x] Test with different field types (array, option, date, user, datetime)
+:warning: URL field can return error with correct value, it's a Jira bug, you can try tro use v2 of the API instead of v3.
+- [x] Test with large CSV file (80000+ issues created/updated successfully)
 - [ ] Multi-project and issue type support
 
 ## Prerequisites
