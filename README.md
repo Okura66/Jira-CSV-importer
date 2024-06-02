@@ -1,7 +1,20 @@
 # Jira CSV Importer
 
-This script allows you to import data from a CSV file into Jira using the Jira REST API.
+this script allows you to create or update Jira issues from a CSV file. The script reads data from the CSV file and creates or updates Jira issues based on the data provided. The script uses the Jira REST API to interact with Jira. The script supports multi-threading to process multiple issues concurrently.
 ![image](https://github.com/Okura66/Jira-CSV-importer/blob/main/Sch%C3%A9ma%20Python.jpg)
+
+⚠️ **Warning:** This script will create or update Jira issues based on the data provided in the CSV file. Please make sure to review the data before proceeding.
+Generation of the CSV file is not covered in this script. Please make sure to generate the CSV file with the correct data and column names before running this script.
+The script is design to be trigger by a cron job to automate the process of creating or updating Jira issues from a CSV file.
+
+## TODO
+- [x] Auto define fields type from schema
+- [x] Check is field is available in create/edit screen
+- [x] Create or update issue
+- [x] Handle response status, logging, error handling
+- [x] Keyboard interrupt
+- [x] Multi-threading
+- [ ] Multi-project and issue type support
 
 ## Prerequisites
 
@@ -43,9 +56,9 @@ Before running the script, you need to configure the following environment varia
 
 ## Customization
 
-You can customize the mapping between CSV columns and Jira fields by modifying the `csv_to_jira_key_map` dictionary in the script. Add or remove key-value pairs to map CSV column names to Jira field names.
+ℹ️ csv_to_jira_key_map is a dictionary that maps the column names in the CSV file to the corresponding Jira field names. You can update this dictionary to map the column names in your CSV file to the correct Jira field names. But actually the script use the column names as Jira field names, you can uncomment the csv_to_jira_key_map and use it if you want to map the column names to different Jira field names...
 
 ## Logging
 
 The script logs its progress and any errors to a file named `.log` in the same directory as the script.
-You can set different logging level (see [logging library](https://docs.python.org/3/library/logging.html#logging-levels)) .
+You can set different logging level (see [logging library](https://docs.python.org/3/library/logging.html#logging-levels)).
