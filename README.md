@@ -36,7 +36,7 @@ Before running the script, you need to configure the following environment varia
 2. Run the script using the following command:
 
      ```
-     python csv_to_jira.py
+     python csv_importer.py
      ```
 
 3. The script will read the CSV file and create or update Jira issues based on the data.
