@@ -15,7 +15,7 @@ logging.basicConfig(
     filemode='w',
     format='%(asctime)s %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S',
-    level=logging.INFO
+    level=logging.DEBUG
 )
 
 import os
@@ -72,16 +72,20 @@ def get_field_type(field_name):
     return None
 
 def check_field(field_name, screen_type):
+    logger.debug(f"Checking field: {field_name}, Screen Type: {screen_type}")
     if not field_name or screen_type not in ["create", "edit"]:
+        logger.error("Invalid field name or screen type")
         return False
-    if field_name in ["duedate", "summary", "assignee", "description", "labels", "reporter"]:
+    if field_name in field_exception:
         return True
     
     screen = screen_create if screen_type == "create" else screen_edit
     for field in screen:
-        if field["name"] == field_name or field["id"] == field_name:
+        if field["id"] or field["name"] == field_name:
             return True
     return False
+
+field_exception = ["due_date", "summary", "assignee", "labels", "reporter"]
 
 '''csv_to_jira_key_map = {
     "issuekey": "issuekey",
@@ -107,12 +111,12 @@ def create_jira_issue(row):
     for csv_field, jira_field in zip(data_frame.columns, data_frame.columns):
     #for csv_field, jira_field in csv_to_jira_key_map.items():
         value = row[csv_field]
-        if pd.notna(value):
+        if pd.notna(value) and (jira_field in schema["fields"] or jira_field in field_exception):
             field_type = get_field_type(jira_field)
             
             logger.debug(f"Processing field: {jira_field}, Value: {value}, Field Type: {field_type}")
             
-            if (pd.notna(row["issuekey"]) and check_field(jira_field, 'create')) or (pd.isna(row["issuekey"]) and check_field(jira_field, 'edit')):
+            if (pd.notna(row["issuekey"]) and check_field(jira_field, 'edit')) or (pd.isna(row["issuekey"]) and check_field(jira_field, 'create')):
                 if field_type == "array":
                     #replace space with comma "," for array fields
                     issue_data["fields"][jira_field] = value.split(" ")
