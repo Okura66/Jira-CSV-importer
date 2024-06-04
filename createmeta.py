@@ -6,7 +6,7 @@ logging.basicConfig(
     encoding='utf-8',
     format='%(asctime)s %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S',
-    level=logging.INFO
+    level=logging.DEBUG
 )
 
 import requests
