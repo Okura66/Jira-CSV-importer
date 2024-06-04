@@ -1,6 +1,6 @@
 ############################################################################################
 #  Title: CSV jira importer                                                                #
-#  Version: 1.0                                                                            #
+#  Version: 1.2                                                                            #
 #  Date: 31/05/2024                                                                        #
 #  Author: Axel MONTZAMIR                                                                  #
 #  Description: This script reads data from a CSV file and creates or updates Jira issues. #
@@ -137,10 +137,6 @@ def create_jira_issue(row):
                 elif field_type == "option":
                     issue_data["fields"][csv_field] = {"value": value}
                 elif field_type == "date":
-                    # Assuming date format is yyyy-MM-dd
-                    # If not try to convert it from dd/MM/yyyy to yyyy-MM-dd
-                    if "/" in value:
-                        value = pd.to_datetime(value, format="%d/%m/%Y").strftime("%Y-%m-%d")
                     issue_data["fields"][csv_field] = value
                 elif csv_field == "description":
                     issue_data["fields"][csv_field] = {
