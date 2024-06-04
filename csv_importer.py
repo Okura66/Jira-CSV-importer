@@ -55,7 +55,6 @@ get_issue_metadata(PROJECT_ID, ISSUETYPE_ID)
 get_screen(SCREEN_CREATE, screen_create_path)
 get_screen(SCREEN_EDIT, screen_edit_path)
 
-# Load schemas and screens once
 with open(os.path.join(script_dir, 'schema.json')) as schema_file:
     schema = json.load(schema_file)
 
@@ -66,10 +65,13 @@ with open(screen_edit_path) as screen_edit_file:
     screen_edit = json.load(screen_edit_file)
 
 def get_field_type(field_name):
+    # Return the type of the field and if array return item type
     for field in schema["fields"]:
         if field["name"] == field_name or field["fieldId"] == field_name or field["key"] == field_name:
+            if field["schema"]["type"] == "array":
+                string = field["schema"]["type"] + " of " + field["schema"]["items"]
+                return string
             return field["schema"]["type"]
-    return None
 
 #verify if field is present in schema
 def check_schema(field_name):
@@ -120,18 +122,25 @@ def create_jira_issue(row):
         value = row[csv_field]
 
         logger.debug(f"Processing field: {csv_field}, Value: {value}, Schema Check: {check_schema(csv_field)}")
-
+        logger.debug(f"Field Type: {get_field_type(csv_field)}")
+        
         if pd.notna(value) and (check_schema(csv_field) or csv_field in field_exception):
             field_type = get_field_type(csv_field)
             
             logger.debug(f"Edit screen : {check_field(csv_field, 'edit')}, Create screen : {check_field(csv_field, 'create')}")
             
             if (pd.notna(row["issuekey"]) and check_field(csv_field, "edit")) or (pd.isna(row["issuekey"]) and check_field(csv_field, "create")):
-                if field_type == "array":
+                if field_type == "array of string":
                     issue_data["fields"][csv_field] = value.split(" ")
+                elif field_type == "array of option":
+                    issue_data["fields"][csv_field] = [{"value": v} for v in value.split(" ")]
                 elif field_type == "option":
                     issue_data["fields"][csv_field] = {"value": value}
                 elif field_type == "date":
+                    # Assuming date format is yyyy-MM-dd
+                    # If not try to convert it from dd/MM/yyyy to yyyy-MM-dd
+                    if "/" in value:
+                        value = pd.to_datetime(value, format="%d/%m/%Y").strftime("%Y-%m-%d")
                     issue_data["fields"][csv_field] = value
                 elif csv_field == "description":
                     issue_data["fields"][csv_field] = {
@@ -145,6 +154,7 @@ def create_jira_issue(row):
                 elif field_type == "user":
                     issue_data["fields"][csv_field] = {"id": value}
                 elif field_type == "datetime":
+                    #This format is ISO 8601: YYYY-MM-DDThh:mm:ss.sTZD
                     issue_data["fields"][csv_field] = value + "T00:00:00.000Z"
                 else:
                     issue_data["fields"][csv_field] = value

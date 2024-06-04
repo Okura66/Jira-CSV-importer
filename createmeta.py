@@ -49,8 +49,8 @@ def get_issue_metadata(PROJECT_ID, ISSUETYPE):
     if response.status_code == 200:
         data = response.json()
         # Enregistrement de la réponse JSON dans le fichier
-        with open(json_file_path, "w") as json_file:
-            json.dump(data, json_file, indent=4)
+        with open(json_file_path, "w", encoding="utf-8") as json_file:
+            json.dump(data, json_file, indent=4, ensure_ascii=False)
         logger.info(f"file {json_file_path} updated.")
     else:
         logger.error(f"Error updating {json_file_path}: {response.text}")
@@ -110,9 +110,9 @@ def get_screen(screen_id, path):
         # Fusionner les champs de tous les onglets
         merged_fields = merge_fields(tabs)
         
-        # Sauvegarder les champs fusionnés dans un fichier JSON
-        with open(path, "w") as f:
-            json.dump(merged_fields, f, indent=4)
+        # Sauvegarder les champs fusionnés dans un fichier JSON en UTF-8
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(merged_fields, f, indent=4, ensure_ascii=False)
         
         logger.info(f"Les champs ont été fusionnés et sauvegardés dans {path}.")
     
