@@ -126,9 +126,8 @@ def create_jira_issue(row):
             
             logger.debug(f"Edit screen : {check_field(csv_field, 'edit')}, Create screen : {check_field(csv_field, 'create')}")
             
-            if (pd.notna(row["issuekey"]) and check_field(csv_field, 'edit')) or (pd.isna(row["issuekey"]) and check_field(csv_field, 'create')):
+            if (pd.notna(row["issuekey"]) and check_field(csv_field, "edit")) or (pd.isna(row["issuekey"]) and check_field(csv_field, "create")):
                 if field_type == "array":
-                    #replace space with comma "," for array fields
                     issue_data["fields"][csv_field] = value.split(" ")
                 elif field_type == "option":
                     issue_data["fields"][csv_field] = {"value": value}
