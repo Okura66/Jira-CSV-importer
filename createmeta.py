@@ -1,5 +1,5 @@
 import logging
-# Configure logging
+# Configuring logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     filename='.log',
@@ -19,47 +19,47 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Obtention du chemin absolu du répertoire du script
+# Get the absolute path of the script
 script_dir = os.path.dirname(os.path.realpath(__file__))
-# Concaténation du chemin absolu avec le nom du fichier JSON
+# Concatenate the absolute path with the JSON file name
 json_file_path = os.path.join(script_dir, "schema.json")
 
 # Configuration
-JIRA_URL = os.getenv("JIRA_URL")  # URL de l'instance JIRA
-JIRA_EMAIL = os.getenv("JIRA_EMAIL")  # Email de l'utilisateur JIRA
-JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")  # Jeton d'API de l'utilisateur JIRA
+JIRA_URL = os.getenv("JIRA_URL")  # URL of the Jira instance
+JIRA_EMAIL = os.getenv("JIRA_EMAIL")  # Email of the Jira user
+JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")  # Jira API token
 
 def get_issue_metadata(PROJECT_ID, ISSUETYPE):
-    # Construction de l'URL
+    # Construct the URL
     url = f"{JIRA_URL}/rest/api/2/issue/createmeta/{PROJECT_ID}/issuetypes/{ISSUETYPE}"
 
-    # En-têtes HTTP avec l'authentification
+    # HTTP headers with authentication
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
 
-    # Authentification basique avec l'email et le jeton d'API
+    # Basic authentication with email and API token
     auth = (JIRA_EMAIL, JIRA_API_TOKEN)
 
-    # Envoi de la requête GET à JIRA
+    # Send a GET request to Jira
     response = requests.get(url, headers=headers, auth=auth)
 
-    # Vérification du statut de la réponse
+    # Check the response status
     if response.status_code == 200:
         data = response.json()
-        # Enregistrement de la réponse JSON dans le fichier
+        # Save the JSON response to a file
         with open(json_file_path, "w", encoding="utf-8") as json_file:
             json.dump(data, json_file, indent=4, ensure_ascii=False)
-        logger.info(f"file {json_file_path} updated.")
+        logger.info(f"File {json_file_path} updated.")
     else:
         logger.error(f"Error updating {json_file_path}: {response.text}")
-        #quit program if error
+        # Quit the program if an error occurs
         exit(1)
 
 def get_screen(screen_id, path):
     try:
-        # Récupérer les onglets d'un écran donné
+        # Get the tabs of a given screen
         def get_tabs(screen_id):
             url = f"{JIRA_URL}/rest/api/3/screens/{screen_id}/tabs"
 
@@ -71,13 +71,13 @@ def get_screen(screen_id, path):
             response = requests.get(url, headers=headers, auth=auth)
 
             if response.status_code == 200:
-                logger.debug(f"Les onglets de l'écran {screen_id} ont été récupérés.")
+                logger.debug(f"Tabs of screen {screen_id} recovered.")
                 return response.json()
             else:
                 logger.error(f"Error getting tabs for screen {screen_id}: {response.text}")
                 exit(1)
         
-        # Récupérer les champs d'un onglet donné
+        # Get the fields of a given tab
         def get_fields(screen_id, tab_id):
             url = f"{JIRA_URL}/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields"
 
@@ -89,13 +89,13 @@ def get_screen(screen_id, path):
             response = requests.get(url, headers=headers, auth=auth)
 
             if response.status_code == 200:
-                logger.debug(f"Les champs de l'onglet {tab_id} dans l'écran {screen_id} ont été récupérés.")
+                logger.debug(f"Fields of tab {tab_id} in screen {screen_id} recovered.")
                 return response.json()
             else:
                 logger.error(f"Error getting fields for tab {tab_id} in screen {screen_id}: {response.text}")
                 exit(1)
 
-        # Fusionner les champs de tous les onglets
+        # Merge the fields of all tabs
         def merge_fields(tabs):
             all_fields = []
             for tab in tabs:
@@ -104,20 +104,20 @@ def get_screen(screen_id, path):
                 all_fields.extend(fields)
             return all_fields
 
-        # Récupérer les onglets
+        # Get the tabs
         tabs = get_tabs(screen_id)
         
-        # Fusionner les champs de tous les onglets
+        # Merge the fields of all tabs
         merged_fields = merge_fields(tabs)
         
-        # Sauvegarder les champs fusionnés dans un fichier JSON en UTF-8
+        # Save the merged fields to a file
         with open(path, "w", encoding="utf-8") as f:
             json.dump(merged_fields, f, indent=4, ensure_ascii=False)
         
-        logger.info(f"Les champs ont été fusionnés et sauvegardés dans {path}.")
+        logger.info(f"Fields merged and saved to {path}.")
     
     except requests.exceptions.RequestException as e:
-        logger.error(f"Erreur lors de la récupération des données : {e}")
+        logger.error(f"Error during data retrieval: {e}")
 
-# Exemple d'appel de la fonction
-#get_screen("11698", "chemin_vers_le_fichier.json")
+# Example of function call
+# get_screen("11698", "path/to/the/file.json")
