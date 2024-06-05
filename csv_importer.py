@@ -29,6 +29,7 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from createmeta import get_issue_metadata, get_screen
+import re
 
 load_dotenv()
 
@@ -105,6 +106,16 @@ field_exception = ["due_date", "summary", "assignee", "labels", "reporter"]
     "Description": "description"
 }'''
 
+tel_pattern = re.compile(r"tel:(\d{10})")
+def extract_phone_number(value):
+    match = tel_pattern.search(value)
+    if match:
+        phone_number = match.group(1)
+        # Supprimer le numéro de téléphone du texte
+        value = value.replace(f"tel:{phone_number}", "").strip()
+        return value, phone_number
+    return value, None
+
 def create_jira_issue(row):
     issue_data = {
         "fields": {
@@ -118,7 +129,6 @@ def create_jira_issue(row):
     }
     
     for csv_field in data_frame.columns:
-    #for csv_field, jira_field in csv_to_jira_key_map.items():
         value = row[csv_field]
 
         logger.debug(f"Processing field: {csv_field}, Value: {value}, Schema Check: {check_schema(csv_field)}")
@@ -143,18 +153,52 @@ def create_jira_issue(row):
                         value = pd.to_datetime(value, format="%d/%m/%Y").strftime("%Y-%m-%d")
                     issue_data["fields"][csv_field] = value
                 elif csv_field == "description":
+                    value, phone_number = extract_phone_number(value)
+                    description_content = []
+                    if phone_number:
+                        description_content.append(
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": phone_number,
+                                        "marks": [
+                                            {
+                                                "type": "link",
+                                                "attrs": {
+                                                    "href": f"tel:{phone_number}"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "\n"  # Ajouter un saut de ligne après le numéro de téléphone
+                                    }
+                                ]
+                            }
+                        )
+                    description_content.append(
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": value
+                                }
+                            ]
+                        }
+                    )
                     issue_data["fields"][csv_field] = {
                         "type": "doc",
                         "version": 1,
-                        "content": [{
-                            "type": "paragraph",
-                            "content": [{"type": "text", "text": value}]
-                        }]
+                        "content": description_content
                     }
                 elif field_type == "user":
                     issue_data["fields"][csv_field] = {"id": value}
                 elif field_type == "datetime":
-                    #This format is ISO 8601: YYYY-MM-DDThh:mm:ss.sTZD
+                    # This format is ISO 8601: YYYY-MM-DDThh:mm:ss.sTZD
                     issue_data["fields"][csv_field] = value + "T00:00:00.000Z"
                 else:
                     issue_data["fields"][csv_field] = value
