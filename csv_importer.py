@@ -1,6 +1,6 @@
 ############################################################################################
 #  Title: CSV jira importer                                                                #
-#  Version: 1.2                                                                            #
+#  Version: 1.0                                                                            #
 #  Date: 31/05/2024                                                                        #
 #  Author: Axel MONTZAMIR                                                                  #
 #  Description: This script reads data from a CSV file and creates or updates Jira issues. #
@@ -29,6 +29,7 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from createmeta import get_issue_metadata, get_screen
+import re
 
 load_dotenv()
 
@@ -105,7 +106,63 @@ field_exception = ["due_date", "summary", "assignee", "labels", "reporter"]
     "Description": "description"
 }'''
 
+def convert_urls_to_json_structure(text):
+    # This inner function replaces matched URLs with the appropriate JSON structure
+    def replace_url(match):
+        url = match.group(0)  # Extract the matched URL
+        if url.startswith('http') or url.startswith('https'):
+            link_type = 'link'
+            display_text = url  # Display full URL for HTTP/HTTPS links
+        elif url.startswith('mailto:'):
+            link_type = 'link'
+            display_text = url.replace('mailto:', '')  # Remove 'mailto:' prefix for display
+        elif url.startswith('tel:'):
+            link_type = 'link'
+            display_text = url.replace('tel:', '')  # Remove 'tel:' prefix for display
+        else:
+            return {"type": "text", "text": url}  # Return as plain text if it doesn't match the above patterns
+
+        # Return the JSON structure for the URL with appropriate link type and display text
+        return {
+            "type": "text",
+            "text": display_text,
+            "marks": [
+                {
+                    "type": link_type,
+                    "attrs": {
+                        "href": url  # The actual URL
+                    }
+                }
+            ]
+        }
+
+    # Regular expression pattern to match URLs
+    url_pattern = re.compile(r'(https?://\S+|mailto:\S+|tel:\S+)')
+    parts = []  # List to hold the JSON parts
+    last_end = 0  # Track the end of the last match
+
+    # Iterate over all matches of the URL pattern in the text
+    for match in url_pattern.finditer(text):
+        start, end = match.span()  # Get the start and end positions of the match
+        if last_end < start:
+            # Append text before the URL match
+            parts.append({"type": "text", "text": text[last_end:start]})
+        # Append the JSON structure for the URL
+        parts.append(replace_url(match))
+        last_end = end  # Update the last_end position
+
+    if last_end < len(text):
+        # Append any remaining text after the last URL match
+        parts.append({"type": "text", "text": text[last_end:]})
+
+    # Wrap the parts in a paragraph and return as a list
+    return [{
+        "type": "paragraph",
+        "content": parts
+    }]
+
 def create_jira_issue(row):
+    # Initialize the issue data with project ID and issue type ID
     issue_data = {
         "fields": {
             "project": {
@@ -117,44 +174,48 @@ def create_jira_issue(row):
         }
     }
     
+    # Iterate over each column in the CSV row
     for csv_field in data_frame.columns:
-    #for csv_field, jira_field in csv_to_jira_key_map.items():
-        value = row[csv_field]
+        value = row[csv_field]  # Get the value for the current field
 
+        # Log the processing details for debugging
         logger.debug(f"Processing field: {csv_field}, Value: {value}, Schema Check: {check_schema(csv_field)}")
         logger.debug(f"Field Type: {get_field_type(csv_field)}")
         
+        # Check if the value is not null and the field exists in the schema or is in the exception list
         if pd.notna(value) and (check_schema(csv_field) or csv_field in field_exception):
-            field_type = get_field_type(csv_field)
+            field_type = get_field_type(csv_field)  # Get the field type from the schema
             
+            # Log additional debug information
             logger.debug(f"Edit screen : {check_field(csv_field, 'edit')}, Create screen : {check_field(csv_field, 'create')}")
             
+            # Check if the field should be included based on the issue key and screen type (create/edit)
             if (pd.notna(row["issuekey"]) and check_field(csv_field, "edit")) or (pd.isna(row["issuekey"]) and check_field(csv_field, "create")):
+                # Populate the issue data based on the field type
                 if field_type == "array of string":
-                    issue_data["fields"][csv_field] = value.split(" ")
+                    issue_data["fields"][csv_field] = value.split(" ")  # Split the value into a list of strings
                 elif field_type == "array of option":
-                    issue_data["fields"][csv_field] = [{"value": v} for v in value.split(" ")]
+                    issue_data["fields"][csv_field] = [{"value": v} for v in value.split(" ")]  # Create a list of option objects
                 elif field_type == "option":
-                    issue_data["fields"][csv_field] = {"value": value}
+                    issue_data["fields"][csv_field] = {"value": value}  # Create a single option object
                 elif field_type == "date":
-                    issue_data["fields"][csv_field] = value
+                    issue_data["fields"][csv_field] = value  # Directly assign the date value
                 elif csv_field == "description":
+                    # Convert URLs in the description to the JSON structure
                     issue_data["fields"][csv_field] = {
                         "type": "doc",
                         "version": 1,
-                        "content": [{
-                            "type": "paragraph",
-                            "content": [{"type": "text", "text": value}]
-                        }]
+                        "content": convert_urls_to_json_structure(value)
                     }
                 elif field_type == "user":
-                    issue_data["fields"][csv_field] = {"id": value}
+                    issue_data["fields"][csv_field] = {"id": value}  # Assign the user ID
                 elif field_type == "datetime":
-                    #This format is ISO 8601: YYYY-MM-DDThh:mm:ss.sTZD
+                    # Format the datetime value in ISO 8601 format
                     issue_data["fields"][csv_field] = value + "T00:00:00.000Z"
                 else:
-                    issue_data["fields"][csv_field] = value
+                    issue_data["fields"][csv_field] = value  # Assign the value directly for other types
 
+    # Log the final issue data for debugging
     logger.debug(f"Final issue data: {issue_data}")
 
     if pd.notna(row["issuekey"]):

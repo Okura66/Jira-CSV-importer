@@ -2,7 +2,7 @@
 
 this script allows you to create or update Jira issues from a CSV file. The script reads data from the CSV file and creates or updates Jira issues based on the data provided. The script uses the Jira REST API to interact with Jira. The script supports multi-threading to process multiple issues concurrently.
 
-![image](https://github.com/Okura66/Jira-CSV-importer/blob/main/Sch%C3%A9ma%20Python.jpg)
+![image](https://github.com/Okura66/Jira-CSV-importer/assets/3253034/bc4adc10-cd02-4c85-ab85-6a72bbb9b29e)
 
 ⚠️ **Warning:** This script will create or update Jira issues based on the data provided in the CSV file. Please make sure to review the data before proceeding.
 Generation of the CSV file is not covered in this script. Please make sure to generate the CSV file with the correct data and column names before running this script.
