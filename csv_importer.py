@@ -1,6 +1,6 @@
 ############################################################################################
 #  Title: CSV jira importer                                                                #
-#  Version: 1.0                                                                            #
+#  Version: 1.4                                                                            #
 #  Date: 31/05/2024                                                                        #
 #  Author: Axel MONTZAMIR                                                                  #
 #  Description: This script reads data from a CSV file and creates or updates Jira issues. #
@@ -15,7 +15,7 @@ logging.basicConfig(
     filemode='w',
     format='%(asctime)s %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S',
-    level=logging.DEBUG
+    level=logging.INFO
 )
 
 import os
@@ -306,3 +306,15 @@ with ThreadPoolExecutor(max_workers=1) as executor:
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received. Stopping...")
         stop_event.set()
+
+# Log the completion message
+logger.info(f"Completed processing {len(data_frame)} rows.")
+logger.info(f"Total issues created/updated: {len([f for f in futures if f.done() and not f.exception()])}/{len(data_frame)}")
+logger.info(f"Total issues failed: {len([f for f in futures if f.done() and f.exception()])}/{len(data_frame)}")
+logger.info("Script execution completed.")                                                     
+
+# Print the completion message
+print(f"Completed processing {len(data_frame)} rows.")
+print(f"Total issues created/updated: {len([f for f in futures if f.done() and not f.exception()])}/{len(data_frame)}")
+print(f"Total issues failed: {len([f for f in futures if f.done() and f.exception()])}/{len(data_frame)}")
+print("Script execution completed.")
