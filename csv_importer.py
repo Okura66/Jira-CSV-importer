@@ -1,13 +1,12 @@
 ############################################################################################
 #  Title: CSV jira importer                                                                #
-#  Version: 1.0                                                                            #
-#  Date: 31/05/2024                                                                        #
+#  Version: 1.6                                                                            #
+#  Date: 11/06/2024                                                                        #
 #  Author: Axel MONTZAMIR                                                                  #
 #  Description: This script reads data from a CSV file and creates or updates Jira issues. #
 ############################################################################################
 
-import logging
-# Configure logging
+import logging # Import the logging module for logging messages
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     filename='.log',
@@ -17,19 +16,19 @@ logging.basicConfig(
     datefmt='%d/%m/%Y %H:%M:%S',
     level=logging.DEBUG
 )
-
 import os
-import json
-import time
-import threading
-import pandas as pd
-import requests
-from requests.auth import HTTPBasicAuth
-from tqdm import tqdm
-from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from createmeta import get_issue_metadata, get_screen
-import re
+import json # JSON module for parsing JSON data
+import time # Time module for sleep function
+import threading # Threading support for parallel processing
+import pandas as pd # Data manipulation library
+import requests # HTTP requests library
+from requests.auth import HTTPBasicAuth # HTTP Basic authentication
+from tqdm import tqdm # Progress bar for processing rows
+from dotenv import load_dotenv # Load environment variables from .env file
+from concurrent.futures import ThreadPoolExecutor, as_completed # Thread pool executor for parallel processing
+from createmeta import get_issue_metadata, get_screen # Import functions from createmeta.py
+import re # Regular expressions
+import gc # Garbage collector
 
 load_dotenv()
 
@@ -47,7 +46,6 @@ if not all([JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN, SCREEN_CREATE, SCREEN_EDIT,
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 csv_file_path = os.path.join(script_dir, 'input.csv')
-data_frame = pd.read_csv(csv_file_path)
 screen_create_path = os.path.join(script_dir, "screen_create.json")
 screen_edit_path = os.path.join(script_dir, "screen_edit.json")
 
@@ -65,15 +63,14 @@ with open(screen_create_path) as screen_create_file:
 with open(screen_edit_path) as screen_edit_file:
     screen_edit = json.load(screen_edit_file)
 
+# Return the type of the field and if array return item type
 def get_field_type(field_name):
-    # Return the type of the field and if array return item type
     for field in schema["fields"]:
         if field["name"] == field_name or field["fieldId"] == field_name or field["key"] == field_name:
             if field["schema"]["type"] == "array":
-                string = field["schema"]["type"] + " of " + field["schema"]["items"]
-                return string
+                return field["schema"]["type"] + " of " + field["schema"]["items"]
             return field["schema"]["type"]
-
+        
 #verify if field is present in schema
 def check_schema(field_name):
     for field in schema["fields"]:
@@ -94,33 +91,23 @@ def check_field(field_name, screen_type):
             return True
     return False
 
-
 field_exception = ["due_date", "summary", "assignee", "labels", "reporter"]
 
-'''csv_to_jira_key_map = {
-    "issuekey": "issuekey",
-    "Labels": "labels",
-    "Summary": "summary",
-    "Assignee Id": "assignee",
-    "Reporter Id": "reporter",
-    "Description": "description"
-}'''
-
+# This inner function replaces matched URLs with the appropriate JSON structure
 def convert_urls_to_json_structure(text):
-    # This inner function replaces matched URLs with the appropriate JSON structure
     def replace_url(match):
-        url = match.group(0)  # Extract the matched URL
+        url = match.group(0) # Extract the matched URL
         if url.startswith('http') or url.startswith('https'):
             link_type = 'link'
-            display_text = url  # Display full URL for HTTP/HTTPS links
+            display_text = url # Display full URL for HTTP/HTTPS links
         elif url.startswith('mailto:'):
             link_type = 'link'
-            display_text = url.replace('mailto:', '')  # Remove 'mailto:' prefix for display
+            display_text = url.replace('mailto:', '') # Remove 'mailto:' prefix for display
         elif url.startswith('tel:'):
             link_type = 'link'
-            display_text = url.replace('tel:', '')  # Remove 'tel:' prefix for display
+            display_text = url.replace('tel:', '') # Remove 'tel:' prefix for display
         else:
-            return {"type": "text", "text": url}  # Return as plain text if it doesn't match the above patterns
+            return {"type": "text", "text": url} # Return as plain text if it doesn't match the above patterns
 
         # Return the JSON structure for the URL with appropriate link type and display text
         return {
@@ -130,7 +117,7 @@ def convert_urls_to_json_structure(text):
                 {
                     "type": link_type,
                     "attrs": {
-                        "href": url  # The actual URL
+                        "href": url # The actual URL
                     }
                 }
             ]
@@ -138,18 +125,18 @@ def convert_urls_to_json_structure(text):
 
     # Regular expression pattern to match URLs
     url_pattern = re.compile(r'(https?://\S+|mailto:\S+|tel:\S+)')
-    parts = []  # List to hold the JSON parts
-    last_end = 0  # Track the end of the last match
+    parts = [] # List to hold the JSON parts
+    last_end = 0 # Track the end of the last match
 
     # Iterate over all matches of the URL pattern in the text
     for match in url_pattern.finditer(text):
-        start, end = match.span()  # Get the start and end positions of the match
+        start, end = match.span() # Get the start and end positions of the match
         if last_end < start:
             # Append text before the URL match
             parts.append({"type": "text", "text": text[last_end:start]})
         # Append the JSON structure for the URL
         parts.append(replace_url(match))
-        last_end = end  # Update the last_end position
+        last_end = end # Update the last_end position
 
     if last_end < len(text):
         # Append any remaining text after the last URL match
@@ -161,8 +148,8 @@ def convert_urls_to_json_structure(text):
         "content": parts
     }]
 
+# Initialize the issue data with project ID and issue type ID
 def create_jira_issue(row):
-    # Initialize the issue data with project ID and issue type ID
     issue_data = {
         "fields": {
             "project": {
@@ -173,33 +160,33 @@ def create_jira_issue(row):
             }
         }
     }
-    
+
     # Iterate over each column in the CSV row
-    for csv_field in data_frame.columns:
-        value = row[csv_field]  # Get the value for the current field
+    for csv_field in row.index:
+        value = row[csv_field] # Get the value for the current field
 
         # Log the processing details for debugging
         logger.debug(f"Processing field: {csv_field}, Value: {value}, Schema Check: {check_schema(csv_field)}")
         logger.debug(f"Field Type: {get_field_type(csv_field)}")
-        
+
         # Check if the value is not null and the field exists in the schema or is in the exception list
         if pd.notna(value) and (check_schema(csv_field) or csv_field in field_exception):
-            field_type = get_field_type(csv_field)  # Get the field type from the schema
-            
+            field_type = get_field_type(csv_field) # Get the field type from the schema
+
             # Log additional debug information
             logger.debug(f"Edit screen : {check_field(csv_field, 'edit')}, Create screen : {check_field(csv_field, 'create')}")
-            
+
             # Check if the field should be included based on the issue key and screen type (create/edit)
             if (pd.notna(row["issuekey"]) and check_field(csv_field, "edit")) or (pd.isna(row["issuekey"]) and check_field(csv_field, "create")):
                 # Populate the issue data based on the field type
                 if field_type == "array of string":
-                    issue_data["fields"][csv_field] = value.split(" ")  # Split the value into a list of strings
+                    issue_data["fields"][csv_field] = value.split(" ") # Split the value into a list of strings
                 elif field_type == "array of option":
-                    issue_data["fields"][csv_field] = [{"value": v} for v in value.split(" ")]  # Create a list of option objects
+                    issue_data["fields"][csv_field] = [{"value": v} for v in value.split(" ")] # Create a list of option objects
                 elif field_type == "option":
-                    issue_data["fields"][csv_field] = {"value": value}  # Create a single option object
+                    issue_data["fields"][csv_field] = {"value": value} # Create a single option object
                 elif field_type == "date":
-                    issue_data["fields"][csv_field] = value  # Directly assign the date value
+                    issue_data["fields"][csv_field] = value # Directly assign the date value
                 elif csv_field == "description":
                     # Convert URLs in the description to the JSON structure
                     issue_data["fields"][csv_field] = {
@@ -208,12 +195,11 @@ def create_jira_issue(row):
                         "content": convert_urls_to_json_structure(value)
                     }
                 elif field_type == "user":
-                    issue_data["fields"][csv_field] = {"id": value}  # Assign the user ID
+                    issue_data["fields"][csv_field] = {"id": value} # Assign the user ID
                 elif field_type == "datetime":
-                    # Format the datetime value in ISO 8601 format
-                    issue_data["fields"][csv_field] = value + "T00:00:00.000Z"
+                    issue_data["fields"][csv_field] = value + "T00:00:00.000Z" # Format the datetime value in ISO 8601 format
                 else:
-                    issue_data["fields"][csv_field] = value  # Assign the value directly for other types
+                    issue_data["fields"][csv_field] = value # Assign the value directly for other types
 
     # Log the final issue data for debugging
     logger.debug(f"Final issue data: {issue_data}")
@@ -238,22 +224,17 @@ def create_jira_issue(row):
         )
         operation = "created"
     
-    logger.debug(f"Request URL: {jira_api_endpoint}")
-    logger.debug(f"Request Payload: {json.dumps(issue_data, indent=2)}")
-    logger.debug(f"Response Status Code: {response.status_code}")
-    logger.debug(f"Response Text: {response.text}")
-
     return response, operation, issue_key if pd.notna(row["issuekey"]) else None, jira_api_endpoint, issue_data
 
 def handle_response(response, operation, issue_key, jira_api_endpoint, issue_data):
-    if response.status_code == 403:  # 403: Forbidden
+    if response.status_code == 403: # 403: Forbidden
         logger.error("Forbidden. Please check if the user has the necessary permissions. Aborting...")
         exit(1)
     elif response.status_code in [200, 204]:  # 200/204: updated
         logger.info(f"Issue {operation} successfully({response.status_code}): {JIRA_URL}/browse/{issue_key}")
-    elif response.status_code == 201:  # 201: Created
+    elif response.status_code == 201: # 201: Created
         logger.info(f"Issue {operation} successfully({response.status_code}): {JIRA_URL}/browse/{response.json()['key']}")
-    elif response.status_code in [502, 504, 408]:  # 502: Bad Gateway, 504: Gateway Timeout, 408: Request Timeout
+    elif response.status_code in [502, 504, 408]: # 502: Bad Gateway, 504: Gateway Timeout, 408: Request Timeout
         logger.warning("Timeout occurred while creating issue. Retrying...")
         for _ in range(2):
             time.sleep(10)
@@ -271,7 +252,7 @@ def handle_response(response, operation, issue_key, jira_api_endpoint, issue_dat
                 break
         else:
             logger.error(f"Failed to {operation} issue({response.status_code}): {response.text}")
-    elif response.status_code == 429:  # 429: Too Many Requests
+    elif response.status_code == 429: # 429: Too Many Requests
         # Retry indefinitely until the request is successful, with a delay of 1 minute
         logger.warning("Too many requests. Retrying...")
         while response.status_code == 429:
@@ -285,24 +266,48 @@ def handle_response(response, operation, issue_key, jira_api_endpoint, issue_dat
     else:
         logger.error(f"Failed to {operation} issue({response.status_code}): {response.text}")
 
-def process_row(row, stop_event):
+def process_row(row, stop_event, stats, pbar):
     if stop_event.is_set():
         return
 
     try:
         response, operation, issue_key, jira_api_endpoint, issue_data = create_jira_issue(row)
         handle_response(response, operation, issue_key, jira_api_endpoint, issue_data)
+        if response.status_code in [200, 201, 204]:
+            stats['success'] += 1
+        else:
+            stats['failed'] += 1
     except Exception as e:
         logger.error(f"Error processing row: {e}")
         stop_event.set()
+        stats['failed'] += 1
+    finally:
+        pbar.update(1)
 
 stop_event = threading.Event()
+chunk_size = 1000  # Define a chunk size for reading the CSV file
+total_rows = sum(1 for _ in pd.read_csv(csv_file_path, chunksize=chunk_size)) * chunk_size
+stats = {'success': 0, 'failed': 0}  # Statistics for logging
 
-with ThreadPoolExecutor(max_workers=1) as executor:
-    futures = {executor.submit(process_row, row, stop_event): index for index, row in data_frame.iterrows()}
-    try:
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing rows"):
-            future.result()  # Will raise exceptions if any occurred
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received. Stopping...")
-        stop_event.set()
+with ThreadPoolExecutor(max_workers=5) as executor, tqdm(total=total_rows, desc="Processing rows") as pbar:
+    for chunk in pd.read_csv(csv_file_path, chunksize=chunk_size):
+        futures = {executor.submit(process_row, row, stop_event, stats, pbar): index for index, row in chunk.iterrows()}
+        try:
+            for future in as_completed(futures):
+                future.result() # Will raise exceptions if any occurred
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received. Stopping...")
+            stop_event.set()
+        finally:
+            del futures
+            gc.collect()
+
+logger.info(f"Completed processing {total_rows} rows.")
+logger.info(f"Total issues created/updated: {stats['success']}/{total_rows}")
+logger.info(f"Total issues failed: {stats['failed']}/{total_rows}")
+logger.info("Script execution completed.")
+
+print(f"Completed processing {total_rows} rows.")
+print(f"Total issues created/updated: {stats['success']}/{total_rows}")
+print(f"Total issues failed: {stats['failed']}/{total_rows}")
+print("Script execution completed.")
