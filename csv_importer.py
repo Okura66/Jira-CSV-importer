@@ -14,11 +14,13 @@ logging.basicConfig(
     filemode='w',
     format='%(asctime)s %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S',
-    level=logging.DEBUG
+    level=logging.INFO
 )
 import os
 import json # JSON module for parsing JSON data
 import time # Time module for sleep function
+import re # Regular expressions
+import gc # Garbage collector
 import threading # Threading support for parallel processing
 import pandas as pd # Data manipulation library
 import requests # HTTP requests library
@@ -27,8 +29,6 @@ from tqdm import tqdm # Progress bar for processing rows
 from dotenv import load_dotenv # Load environment variables from .env file
 from concurrent.futures import ThreadPoolExecutor, as_completed # Thread pool executor for parallel processing
 from createmeta import get_issue_metadata, get_screen # Import functions from createmeta.py
-import re # Regular expressions
-import gc # Garbage collector
 
 load_dotenv()
 
@@ -49,19 +49,14 @@ csv_file_path = os.path.join(script_dir, 'input.csv')
 screen_create_path = os.path.join(script_dir, "screen_create.json")
 screen_edit_path = os.path.join(script_dir, "screen_edit.json")
 
-#create or update json schema and screen files
-get_issue_metadata(PROJECT_ID, ISSUETYPE_ID)
-get_screen(SCREEN_CREATE, screen_create_path)
-get_screen(SCREEN_EDIT, screen_edit_path)
-
 with open(os.path.join(script_dir, 'schema.json')) as schema_file:
-    schema = json.load(schema_file)
+        schema = json.load(schema_file)
 
 with open(screen_create_path) as screen_create_file:
-    screen_create = json.load(screen_create_file)
+        screen_create = json.load(screen_create_file)
 
 with open(screen_edit_path) as screen_edit_file:
-    screen_edit = json.load(screen_edit_file)
+        screen_edit = json.load(screen_edit_file)
 
 # Return the type of the field and if array return item type
 def get_field_type(field_name):
@@ -284,30 +279,57 @@ def process_row(row, stop_event, stats, pbar):
     finally:
         pbar.update(1)
 
-stop_event = threading.Event()
-chunk_size = 1000  # Define a chunk size for reading the CSV file
-total_rows = sum(1 for _ in pd.read_csv(csv_file_path, chunksize=chunk_size)) * chunk_size
-stats = {'success': 0, 'failed': 0}  # Statistics for logging
+def main():
+    # Retrieve and update issue metadata and screen configurations
+    get_issue_metadata(PROJECT_ID, ISSUETYPE_ID)
+    get_screen(SCREEN_CREATE, screen_create_path)
+    get_screen(SCREEN_EDIT, screen_edit_path)
+    
+    
+    stop_event = threading.Event() # Event used to signal the threads to stop processing
+    chunk_size = 1000 # Define the chunk size for reading the CSV file in parts
+    total_rows = len(pd.read_csv(csv_file_path)) # Calculate the total number of rows in the CSV file
+    stats = {'success': 0, 'failed': 0} # Dictionary to keep track of success and failure counts
 
-with ThreadPoolExecutor(max_workers=5) as executor, tqdm(total=total_rows, desc="Processing rows") as pbar:
-    for chunk in pd.read_csv(csv_file_path, chunksize=chunk_size):
-        futures = {executor.submit(process_row, row, stop_event, stats, pbar): index for index, row in chunk.iterrows()}
-        try:
-            for future in as_completed(futures):
-                future.result() # Will raise exceptions if any occurred
-        except KeyboardInterrupt:
-            logger.info("Keyboard interrupt received. Stopping...")
-            stop_event.set()
-        finally:
-            del futures
-            gc.collect()
+    try:
+        # Create a ThreadPoolExecutor to manage multiple threads
+        with ThreadPoolExecutor(max_workers=5) as executor, tqdm(total=total_rows, desc="Processing rows") as pbar:
+            for chunk in pd.read_csv(csv_file_path, chunksize=chunk_size):
+                # Submit tasks for each row in the current chunk
+                futures = {executor.submit(process_row, row, stop_event, stats, pbar): index for index, row in chunk.iterrows()}
+                try:
+                    # Wait for the tasks to complete and handle their results
+                    for future in as_completed(futures):
+                        future.result()  # This will raise any exceptions caught during processing
+                except KeyboardInterrupt:
+                    # Handle the keyboard interrupt (CTRL + C) by setting the stop event
+                    logger.info("Keyboard interrupt received. Stopping...")
+                    stop_event.set()
+                    break
+                finally:
+                    # Cancel all futures that are still running
+                    for future in futures:
+                        future.cancel()
+                    executor.shutdown(wait=False) # Shutdown the executor to stop accepting new tasks
+                    gc.collect() # Collect garbage to free up memory
+                    break
 
-logger.info(f"Completed processing {total_rows} rows.")
-logger.info(f"Total issues created/updated: {stats['success']}/{total_rows}")
-logger.info(f"Total issues failed: {stats['failed']}/{total_rows}")
-logger.info("Script execution completed.")
+    except KeyboardInterrupt:
+        # Handle keyboard interrupt (CTRL + C) at the outer level
+        logger.info("Keyboard interrupt received. Stopping...")
+        stop_event.set()
+        executor.shutdown(wait=False)
+        gc.collect()
 
-print(f"Completed processing {total_rows} rows.")
-print(f"Total issues created/updated: {stats['success']}/{total_rows}")
-print(f"Total issues failed: {stats['failed']}/{total_rows}")
-print("Script execution completed.")
+    total_processed = stats['success'] + stats['failed'] # Calculate the total number of processed rows
+    success_percentage = (stats['success'] / total_processed) * 100 if total_processed else 0 # Calculate the percentage of successful operations
+    failed_percentage = (stats['failed'] / total_processed) * 100 if total_processed else 0 # Calculate the percentage of failed operations
+
+    # Log the final processing statistics
+    logger.info(f"Completed processing {total_processed}/{total_rows} rows.")
+    logger.info(f"Total issues created/updated: {stats['success']} ({success_percentage:.2f}%)")
+    logger.info(f"Total issues failed: {stats['failed']} ({failed_percentage:.2f}%)")
+    logger.info("Script execution completed.")
+
+if __name__ == "__main__":
+    main()
