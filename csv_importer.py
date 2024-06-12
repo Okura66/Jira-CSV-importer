@@ -285,7 +285,6 @@ def main():
     get_screen(SCREEN_CREATE, screen_create_path)
     get_screen(SCREEN_EDIT, screen_edit_path)
     
-    
     stop_event = threading.Event() # Event used to signal the threads to stop processing
     chunk_size = 1000 # Define the chunk size for reading the CSV file in parts
     total_rows = len(pd.read_csv(csv_file_path)) # Calculate the total number of rows in the CSV file
@@ -293,7 +292,7 @@ def main():
 
     try:
         # Create a ThreadPoolExecutor to manage multiple threads
-        with ThreadPoolExecutor(max_workers=5) as executor, tqdm(total=total_rows, desc="Processing rows") as pbar:
+        with ThreadPoolExecutor(max_workers=5) as executor, tqdm(total=total_rows, desc="Processing rows", unit="issues") as pbar:
             for chunk in pd.read_csv(csv_file_path, chunksize=chunk_size):
                 # Submit tasks for each row in the current chunk
                 futures = {executor.submit(process_row, row, stop_event, stats, pbar): index for index, row in chunk.iterrows()}
