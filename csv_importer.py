@@ -48,8 +48,13 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 csv_file_path = os.path.join(script_dir, 'input.csv')
 screen_create_path = os.path.join(script_dir, "screen_create.json")
 screen_edit_path = os.path.join(script_dir, "screen_edit.json")
+schema_path = os.path.join(script_dir, "schema.json")
 
-with open(os.path.join(script_dir, 'schema.json')) as schema_file:
+get_issue_metadata(PROJECT_ID, ISSUETYPE_ID)
+get_screen(SCREEN_CREATE, screen_create_path)
+get_screen(SCREEN_EDIT, screen_edit_path)
+
+with open(schema_path) as schema_file:
         schema = json.load(schema_file)
 
 with open(screen_create_path) as screen_create_file:
@@ -57,6 +62,14 @@ with open(screen_create_path) as screen_create_file:
 
 with open(screen_edit_path) as screen_edit_file:
         screen_edit = json.load(screen_edit_file)
+
+def cleanup_files(*file_paths):
+    for file_path in file_paths:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.debug(f"{file_path} has been removed.")
+        else:
+            logger.debug(f"{file_path} does not exist.")
 
 # Return the type of the field and if array return item type
 def get_field_type(field_name):
@@ -178,6 +191,11 @@ def create_jira_issue(row):
                     issue_data["fields"][csv_field] = value.split(" ") # Split the value into a list of strings
                 elif field_type == "array of option":
                     issue_data["fields"][csv_field] = [{"value": v} for v in value.split(" ")] # Create a list of option objects
+                elif field_type == "array of cmdb-object-field":
+                    workspaceId, objectId = value.split(':')
+                    issue_data["fields"][csv_field] = [{"workspaceId": workspaceId, "id": value, "objectId": objectId}]
+                elif field_type == "array of user":
+                    issue_data["fields"][csv_field] = [{"id": v} for v in value.split(" ")] # Create a list of option objects
                 elif field_type == "option":
                     issue_data["fields"][csv_field] = {"value": value} # Create a single option object
                 elif field_type == "date":
@@ -195,6 +213,8 @@ def create_jira_issue(row):
                     issue_data["fields"][csv_field] = value + "T00:00:00.000Z" # Format the datetime value in ISO 8601 format
                 else:
                     issue_data["fields"][csv_field] = value # Assign the value directly for other types
+            else:
+                logger.info(f"Skipping field: {csv_field} for issuekey: {row['issuekey']}")
 
     # Log the final issue data for debugging
     logger.debug(f"Final issue data: {issue_data}")
@@ -246,7 +266,11 @@ def handle_response(response, operation, issue_key, jira_api_endpoint, issue_dat
                 logger.info(f"Issue {operation} successfully({response.status_code}): {JIRA_URL}/browse/{response.json()['key']}")
                 break
         else:
-            logger.error(f"Failed to {operation} issue({response.status_code}): {response.text}")
+            if operation == "updated":
+                logger.error(f"Failed to {operation} issue {issue_key}({response.status_code}): {response.text}")
+            else:
+                logger.error(f"Failed to {operation} issue({response.status_code}): {response.text}")
+
     elif response.status_code == 429: # 429: Too Many Requests
         # Retry indefinitely until the request is successful, with a delay of 1 minute
         logger.warning("Too many requests. Retrying...")
@@ -259,7 +283,10 @@ def handle_response(response, operation, issue_key, jira_api_endpoint, issue_dat
                 headers={"Content-Type": "application/json"}
             )
     else:
-        logger.error(f"Failed to {operation} issue({response.status_code}): {response.text}")
+        if operation == "updated":
+            logger.error(f"Failed to {operation} issue {issue_key}({response.status_code}): {response.text}")
+        else:
+            logger.error(f"Failed to {operation} issue({response.status_code}): {response.text}")
 
 def process_row(row, stop_event, stats, pbar):
     if stop_event.is_set():
@@ -280,11 +307,7 @@ def process_row(row, stop_event, stats, pbar):
         pbar.update(1)
 
 def main():
-    # Retrieve and update issue metadata and screen configurations
-    get_issue_metadata(PROJECT_ID, ISSUETYPE_ID)
-    get_screen(SCREEN_CREATE, screen_create_path)
-    get_screen(SCREEN_EDIT, screen_edit_path)
-    
+
     stop_event = threading.Event() # Event used to signal the threads to stop processing
     chunk_size = 1000 # Define the chunk size for reading the CSV file in parts
     total_rows = len(pd.read_csv(csv_file_path)) # Calculate the total number of rows in the CSV file
@@ -315,6 +338,7 @@ def main():
 
     except KeyboardInterrupt:
         # Handle keyboard interrupt (CTRL + C) at the outer level
+        cleanup_files(csv_file_path, screen_create_path, screen_edit_path)
         logger.info("Keyboard interrupt received. Stopping...")
         stop_event.set()
         executor.shutdown(wait=False)
@@ -329,6 +353,7 @@ def main():
     logger.info(f"Total issues created/updated: {stats['success']} ({success_percentage:.2f}%)")
     logger.info(f"Total issues failed: {stats['failed']} ({failed_percentage:.2f}%)")
     logger.info("Script execution completed.")
+    cleanup_files(csv_file_path, screen_create_path, screen_edit_path, schema_path)
 
 if __name__ == "__main__":
     main()
