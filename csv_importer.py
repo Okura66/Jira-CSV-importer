@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 ############################################################################################
 #  Title: CSV jira importer                                                                #
 #  Version: 1.6                                                                            #
@@ -30,7 +32,7 @@ from dotenv import load_dotenv # Load environment variables from .env file
 from concurrent.futures import ThreadPoolExecutor, as_completed # Thread pool executor for parallel processing
 from createmeta import get_issue_metadata, get_screen # Import functions from createmeta.py
 
-load_dotenv()
+load_dotenv() # Load environment variables from the .env file
 
 JIRA_URL = os.getenv("JIRA_URL")
 JIRA_USERNAME = os.getenv("JIRA_EMAIL")
@@ -308,16 +310,15 @@ def process_row(row, stop_event, stats, pbar):
 
 def main():
 
-    stop_event = threading.Event() # Event used to signal the threads to stop processing
-    chunk_size = 1000 # Define the chunk size for reading the CSV file in parts
-    total_rows = len(pd.read_csv(csv_file_path)) # Calculate the total number of rows in the CSV file
-    stats = {'success': 0, 'failed': 0} # Dictionary to keep track of success and failure counts
+    stop_event = threading.Event()  # Event used to signal the threads to stop processing
+    chunk_size = 1000  # Define the chunk size for reading the CSV file in parts
+    total_rows = len(pd.read_csv(csv_file_path))  # Calculate the total number of rows in the CSV file
+    stats = {'success': 0, 'failed': 0}  # Dictionary to keep track of success and failure counts
 
     try:
         # Create a ThreadPoolExecutor to manage multiple threads
-        with ThreadPoolExecutor(max_workers=5) as executor, tqdm(total=total_rows, desc="Processing rows", unit="issues") as pbar:
+        with ThreadPoolExecutor(max_workers=10) as executor, tqdm(total=total_rows, desc="Processing rows", unit="issues") as pbar:
             for chunk in pd.read_csv(csv_file_path, chunksize=chunk_size):
-                # Submit tasks for each row in the current chunk
                 futures = {executor.submit(process_row, row, stop_event, stats, pbar): index for index, row in chunk.iterrows()}
                 try:
                     # Wait for the tasks to complete and handle their results
@@ -328,32 +329,34 @@ def main():
                     logger.info("Keyboard interrupt received. Stopping...")
                     stop_event.set()
                     break
+                except Exception as e:
+                    logger.error(f"Error processing chunk: {e}")
+                    stop_event.set()
+                    break
                 finally:
-                    # Cancel all futures that are still running
+                    # Ensure proper cleanup of the futures
                     for future in futures:
                         future.cancel()
-                    executor.shutdown(wait=False) # Shutdown the executor to stop accepting new tasks
-                    gc.collect() # Collect garbage to free up memory
-                    break
+                    # The executor will be properly shut down at the end of the context manager
+                    gc.collect()  # Collect garbage to free up memory
 
     except KeyboardInterrupt:
         # Handle keyboard interrupt (CTRL + C) at the outer level
-        cleanup_files(csv_file_path, screen_create_path, screen_edit_path)
+        cleanup_files(screen_create_path, screen_edit_path, schema_path, csv_file_path)
         logger.info("Keyboard interrupt received. Stopping...")
         stop_event.set()
-        executor.shutdown(wait=False)
         gc.collect()
 
-    total_processed = stats['success'] + stats['failed'] # Calculate the total number of processed rows
-    success_percentage = (stats['success'] / total_processed) * 100 if total_processed else 0 # Calculate the percentage of successful operations
-    failed_percentage = (stats['failed'] / total_processed) * 100 if total_processed else 0 # Calculate the percentage of failed operations
+    total_processed = stats['success'] + stats['failed']  # Calculate the total number of processed rows
+    success_percentage = (stats['success'] / total_processed) * 100 if total_processed else 0  # Calculate the percentage of successful operations
+    failed_percentage = (stats['failed'] / total_processed) * 100 if total_processed else 0  # Calculate the percentage of failed operations
 
     # Log the final processing statistics
     logger.info(f"Completed processing {total_processed}/{total_rows} rows.")
     logger.info(f"Total issues created/updated: {stats['success']} ({success_percentage:.2f}%)")
     logger.info(f"Total issues failed: {stats['failed']} ({failed_percentage:.2f}%)")
     logger.info("Script execution completed.")
-    cleanup_files(csv_file_path, screen_create_path, screen_edit_path, schema_path)
+    cleanup_files(screen_create_path, screen_edit_path, schema_path, csv_file_path)
 
 if __name__ == "__main__":
     main()
