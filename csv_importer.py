@@ -7,18 +7,22 @@
 #  Author: Axel MONTZAMIR                                                                  #
 #  Description: This script reads data from a CSV file and creates or updates Jira issues. #
 ############################################################################################
-
 import logging # Import the logging module for logging messages
+import os
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+log_file_path = os.path.join(script_dir, 'scare.log')
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    filename='.log',
+    filename=log_file_path,
     encoding='utf-8',
     filemode='w',
     format='%(asctime)s %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S',
     level=logging.INFO
 )
-import os
+
 import json # JSON module for parsing JSON data
 import time # Time module for sleep function
 import re # Regular expressions
@@ -46,7 +50,6 @@ if not all([JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN, SCREEN_CREATE, SCREEN_EDIT,
     logger.error("Please set environment variables")
     exit(1)
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
 csv_file_path = os.path.join(script_dir, 'input.csv')
 screen_create_path = os.path.join(script_dir, "screen_create.json")
 screen_edit_path = os.path.join(script_dir, "screen_edit.json")
